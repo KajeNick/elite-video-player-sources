@@ -138,8 +138,6 @@ class Elite_Video_Player_Sources_Player {
 		$elite_player               = $elite_players[ $elite_id ];
 		$elite_player['rootFolder'] = plugins_url() . "/Elite-video-player/";
 
-		elite_vp_trace( $elite_player );
-
 		foreach ( $args as $key => $val ) {
 
 			if ( $val != - 1 ) {
@@ -644,7 +642,7 @@ class Elite_Video_Player_Sources_Player {
 
 		}
 
-		$elite_player = $this->read_sources();
+		$elite_player = $this->read_sources( $elite_player );
 
 		$output = ( '<div class="Elite_video_player" id="' . $elite_id . '" ><div id="elite_options" style="display:none;">' . json_encode( $elite_player ) . '</div></div>' );
 
@@ -661,56 +659,46 @@ class Elite_Video_Player_Sources_Player {
 	 * @return array
 	 */
 	private function read_sources( $elite_player ) {
-
 		global $post;
 
-		for ( $i = 1; $i <= 8; $i ++ ) {
+		$source_type = false;
+
+		for ( $i = 1; $i <= 10; $i ++ ) {
 			$source      = get_field( 'elite-video-source-' . $i, $post->ID );
-			$pure_source = Elite_Video_Player_Sources_Checks::check_source( $source );
-			if ( false !== $pure_source ) {
+			$source_type = Elite_Video_Player_Sources_Checks::check_source( $source );
+			if ( false !== $source_type ) {
 				break;
+			} else {
+				update_field( 'elite-video-source-' . $i, $post->ID, '' );
 			}
 		}
 
-		if ( false !== $pure_source ) {
-			
+		if ( false !== $source_type ) {
+			$embed_source = Elite_Video_Player_Sources_Checks::get_embed_source( $source, $source_type );
+
+			$first_video          = isset( $elite_player['videos'][0] ) ? $elite_player['videos'][0] : array();
+			$first_video['title'] = $post->post_title;
+
+			if ( 'youtube' == $source_type ) {
+				$elite_player['videoType'] = 'youtube';
+				$first_video['videoType']  = 'youtube';
+				$first_video['youtubeID']  = Elite_Video_Player_Sources_Checks::get_youtube_id( $embed_source );
+				unset( $first_video['mp4HD'] );
+				unset( $first_video['mp4SD'] );
+			} else {
+				$elite_player['videoType'] = 'HTML5';
+				$first_video['videoType']  = 'HTML5';
+				$first_video['mp4HD']      = $embed_source;
+				$first_video['mp4SD']      = $embed_source;
+				unset( $first_video['youtubeID'] );
+			}
+
+			$elite_player['videos'] = array(
+				$first_video
+			);
+
+
 		}
-
-		/*
-		[videos] => Array
-		(
-			[0] => Array
-			(
-				[videoType] => HTML5
-				[title] => title
-		[description] => description
-		[info] => info
-		[thumbImg] => thumbImg
-		[mp4HD] => https://www.googleapis.com/drive/v3/files/1sz6wx6v_7-L1RAY9AX0ZjArbhX5WtIY_?alt=media&key=AIzaSyDMJMHsDZFIPs03Steg3Cx2WAgtkxwXL2Y
-                    [mp4SD] => https://www.googleapis.com/drive/v3/files/1sz6wx6v_7-L1RAY9AX0ZjArbhX5WtIY_?alt=media&key=AIzaSyDMJMHsDZFIPs03Steg3Cx2WAgtkxwXL2Y
-                    [ccUrl] => ccUrl
-		[enable_mp4_download] => no
-		[prerollAD] => no
-		[prerollGotoLink] => prerollGotoLink
-		[preroll_mp4] => preroll_mp4
-		[prerollSkipTimer] => prerollSkipTimer
-		[midrollAD] => no
-		[midrollAD_displayTime] => midrollAD_displayTime
-		[midrollGotoLink] => midrollGotoLink
-		[midroll_mp4] => midroll_mp4
-		[midrollSkipTimer] => midrollSkipTimer
-		[postrollAD] => no
-		[postrollGotoLink] => postrollGotoLink
-		[postroll_mp4] => postroll_mp4
-		[postrollSkipTimer] => postrollSkipTimer
-		[popupAdShow] => no
-		[popupImg] => popupImg
-		[popupAdStartTime] => popupAdStartTime
-		[popupAdEndTime] => popupAdEndTime
-		[popupAdGoToLink] => popupAdGoToLink
-                )
-
-        )**/
 
 		return $elite_player;
 	}

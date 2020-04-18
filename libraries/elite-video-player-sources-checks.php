@@ -21,7 +21,7 @@ class Elite_Video_Player_Sources_Checks {
 
 		$is_google_drive = strpos( $source, 'googleapis.com' ) !== false;
 		if ( $is_google_drive && self::remote_file_exists( $source ) ) {
-			return 'html5';
+			return 'googledrive';
 		}
 
 		$is_youtube = strpos( $source, 'youtube.com' ) !== false
@@ -35,6 +35,26 @@ class Elite_Video_Player_Sources_Checks {
 			return 'dropbox';
 		}
 
+		$is_archive_org = strpos( $source, 'archive.org' ) !== false;
+		if ( $is_archive_org && self::check_archive_exists( $source ) ) {
+			return 'archive';
+		}
+
+		$is_bitchute = strpos( $source, 'bitchute.com' ) !== false;
+		if ( $is_bitchute && self::check_bitchute_exists( $source ) ) {
+			return 'bitchute';
+		}
+
+		$is_vidlii = strpos( $source, 'vidlii.com' ) !== false;
+		if ( $is_vidlii && self::check_vidlii_exists( $source ) ) {
+			return 'vidlii';
+		}
+
+		$is_mega = strpos( $source, 'mega.nz' ) !== false;
+		if ( $is_mega && self::check_mega_exists( $source ) ) {
+			return 'mega';
+		}
+
 		return false;
 
 	}
@@ -44,13 +64,14 @@ class Elite_Video_Player_Sources_Checks {
 	 *
 	 * @since 1.0.0
 	 *
-	 * @param $video_url
+	 * @param $source
 	 *
 	 * @return bool
 	 */
-	private static function check_youtube_video_exists( $video_url ) {
+	private static function check_youtube_video_exists( $source ) {
 
-		$video_url = 'https://www.youtube.com/oembed?url=' . $video_url . '&format=json';
+		$source    = self::prepare_source_youtube( $source );
+		$video_url = 'https://www.youtube.com/oembed?url=' . $source . '&format=json';
 		$headers   = @get_headers( $video_url );
 
 		return ( strpos( $headers[0], '200' ) > 0 ) ? true : false;
@@ -67,14 +88,118 @@ class Elite_Video_Player_Sources_Checks {
 	 */
 	private static function check_dropbox_exists( $source ) {
 
-		$source = self::source_to_dropbox( $source );
+		$source = self::prepare_source_dropbox( $source );
 		$title  = self::get_page_title( $source );
 
-		if ( strpos( $title, 'Link not found' ) !== false ) {
+		if ( strpos( $title, 'Link not found' ) !== false
+		     || strpos( $title, 'Error' ) !== false ) {
 			return false;
 		}
 
 		return true;
+	}
+
+	/**
+	 * Checking Archive.org video
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @return bool
+	 */
+	private static function check_archive_exists( $source ) {
+
+		$source = self::prepare_source_archive( $source, true );
+		$title  = self::get_page_title( $source );
+
+		if ( empty( $title ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Checking Bitchute.com video
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @return bool
+	 */
+	private static function check_bitchute_exists( $source ) {
+
+		$source = self::prepare_source_bitchute( $source, true );
+		$title  = self::get_page_title( $source );
+
+		if ( empty( $title ) ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Checking vidlii.com
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @return bool
+	 */
+	private static function check_vidlii_exists( $source ) {
+
+		$source = self::prepare_source_vidlii( $source );
+		$title  = self::get_page_title( $source );
+
+		if ( strpos( $title, 'Display Yourself' ) !== false ) {
+			return false;
+		}
+
+		return true;
+	}
+
+	/**
+	 * Checking mega video
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @return bool
+	 */
+	private static function check_mega_exists( $source ) {
+
+		$source          = self::prepare_source_mega( $source, true );
+		$exploded_source = explode( 'embed/', $source );
+
+		if ( isset( $exploded_source[1] ) ) {
+			$file_key = explode( '#', $exploded_source[1] );
+			if ( isset( $file_key[0] ) ) {
+				$req = [
+					'a' => 'g',
+					'g' => 1,
+					'p' => $file_key[0],
+				];
+
+				$ch = curl_init( 'https://g.api.mega.co.nz/cs?id=1' );
+				curl_setopt( $ch, CURLOPT_RETURNTRANSFER, true );
+				curl_setopt( $ch, CURLOPT_POST, true );
+				curl_setopt( $ch, CURLOPT_POSTFIELDS, json_encode( array( $req ) ) );
+				$resp = curl_exec( $ch );
+				curl_close( $ch );
+				$resp = json_decode( $resp, true );
+
+				if ( isset( $resp[0]['msd'] ) ) {
+					return true;
+				}
+			}
+		}
+
+		return false;
 	}
 
 	/**
@@ -84,50 +209,209 @@ class Elite_Video_Player_Sources_Checks {
 	 *
 	 * @param $source
 	 *
+	 * @param bool $to_embed
+	 *
 	 * @return string
 	 */
-	public static function source_to_dropbox_user_content( $source ) {
+	public static function prepare_source_youtube( $source, $to_embed = false ) {
 
-		if ( strpos( $source, 'dl.dropboxusercontent.com' ) ) {
+		if ( $to_embed && strpos( $source, 'youtube.com/embed' ) !== false
+		     || ! $to_embed && strpos( $source, 'youtube.com/watch' ) !== false ) {
 			return $source;
 		}
 
-		if ( strpos( $source, 'dropbox.com' ) ) {
-			$exploded_source = explode( 'dropbox.com/', $source );
+		if ( $to_embed && strpos( $source, 'youtube.com/watch' ) !== false ) {
+			$exploded_source = explode( 'youtube.com/watch?v=', $source );
 
 			if ( isset( $exploded_source[1] ) ) {
-				return 'https://dl.dropboxusercontent.com/' . $exploded_source[1];
+				return 'https://www.youtube.com/embed/' . $exploded_source[1];
+			}
+		} elseif ( ! $to_embed && strpos( $source, 'youtube.com/embed' ) !== false ) {
+			$exploded_source = explode( 'youtube.com/embed/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://www.youtube.com/watch?v=' . $exploded_source[1];
 			}
 		}
 
-		return '';
+		return false;
 	}
 
 	/**
-	 * Convert drobdoxusercontent link to dropbox
+	 * Convert dropbox share link to dl.dropboxusercontent.com
 	 *
 	 * @since 1.0.0
 	 *
 	 * @param $source
 	 *
+	 * @param bool $to_embed
+	 *
 	 * @return string
 	 */
-	public static function source_to_dropbox( $source ) {
+	public static function prepare_source_dropbox( $source, $to_embed = false ) {
 
-		if ( strpos( $source, 'dropbox.com' ) ) {
+		if ( $to_embed && strpos( $source, 'dl.dropboxusercontent.com' ) !== false
+		     || ! $to_embed && strpos( $source, 'dropbox.com' ) !== false ) {
 			return $source;
 		}
 
-		if ( strpos( $source, 'dropboxusercontent.com' ) ) {
-			$exploded_source = explode( 'dropboxusercontent.com/', $source );
+		if ( $to_embed && strpos( $source, 'dropbox.com' ) !== false ) {
+			$exploded_source = explode( 'dropbox.com/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://dl.dropboxusercontent.com/' . $exploded_source[1];
+			}
+		} elseif ( ! $to_embed && strpos( $source, 'dl.dropboxusercontent.com' ) !== false ) {
+			$exploded_source = explode( 'dl.dropboxusercontent.com/', $source );
 
 			if ( isset( $exploded_source[1] ) ) {
 				return 'https://www.dropbox.com/' . $exploded_source[1];
 			}
 		}
 
-		return '';
+		return false;
 	}
+
+	/**
+	 * Convert link for archive to embed or not
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @param bool $to_embed
+	 *
+	 * @return string
+	 */
+	public static function prepare_source_archive( $source, $to_embed = false ) {
+
+		if ( $to_embed && strpos( $source, 'archive.org/embed' ) !== false
+		     || ! $to_embed && strpos( $source, 'archive.org/details' ) !== false ) {
+			return $source;
+		}
+
+		if ( $to_embed && strpos( $source, 'archive.org/details' ) !== false ) {
+			$exploded_source = explode( 'archive.org/details/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://archive.org/embed/' . $exploded_source[1];
+			}
+		} elseif ( ! $to_embed && strpos( $source, 'archive.org/embed' ) !== false ) {
+			$exploded_source = explode( 'archive.org/embed/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://archive.org/details/' . $exploded_source[1];
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Convert link for mega to embed or not
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @param bool $to_embed
+	 *
+	 * @return string
+	 */
+	public static function prepare_source_mega( $source, $to_embed = false ) {
+
+		if ( $to_embed && strpos( $source, 'mega.nz/embed' ) !== false
+		     || ! $to_embed && strpos( $source, 'mega.nz/file' ) !== false ) {
+			return $source;
+		}
+
+		if ( $to_embed && strpos( $source, 'mega.nz/file' ) !== false ) {
+			$exploded_source = explode( 'mega.nz/file/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://mega.nz/embed/' . $exploded_source[1];
+			}
+		} elseif ( ! $to_embed && strpos( $source, 'mega.nz/embed' ) !== false ) {
+			$exploded_source = explode( 'mega.nz/embed/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://mega.nz/file/' . $exploded_source[1];
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Convert link for bitchute.com to embed or not
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @param bool $to_embed
+	 *
+	 * @return string
+	 */
+	public static function prepare_source_bitchute( $source, $to_embed = false ) {
+
+		if ( $to_embed && strpos( $source, 'bitchute.com/embed' ) !== false
+		     || ! $to_embed && strpos( $source, 'bitchute.com/video' ) !== false ) {
+			return $source;
+		}
+
+		if ( $to_embed && strpos( $source, 'bitchute.com/video' ) !== false ) {
+			$exploded_source = explode( 'bitchute.com/video/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://www.bitchute.com/embed/' . $exploded_source[1];
+			}
+		} elseif ( ! $to_embed && strpos( $source, 'bitchute.com/embed' ) !== false ) {
+			$exploded_source = explode( 'bitchute.com/embed/', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://www.bitchute.com/video/' . $exploded_source[1];
+			}
+		}
+
+		return false;
+	}
+
+	/**
+	 * Convert link for vidlii.com to embed or not
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 *
+	 * @param bool $to_embed
+	 *
+	 * @return string
+	 */
+	public static function prepare_source_vidlii( $source, $to_embed = false ) {
+
+		if ( $to_embed && strpos( $source, 'vidlii.com/embed' ) !== false
+		     || ! $to_embed && strpos( $source, 'vidlii.com/watch' ) !== false ) {
+			return $source;
+		}
+
+		if ( $to_embed && strpos( $source, 'vidlii.com/watch' ) !== false ) {
+			$exploded_source = explode( 'vidlii.com/watch', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://www.vidlii.com/embed' . $exploded_source[1];
+			}
+		} elseif ( ! $to_embed && strpos( $source, 'www.vidlii.com/embed' ) !== false ) {
+			$exploded_source = explode( 'www.vidlii.com/embed', $source );
+
+			if ( isset( $exploded_source[1] ) ) {
+				return 'https://www.vidlii.com/watch' . $exploded_source[1];
+			}
+		}
+
+		return false;
+	}
+
 
 	/**
 	 * Check remote file
@@ -161,15 +445,96 @@ class Elite_Video_Player_Sources_Checks {
 	 */
 	private static function get_page_title( $source ) {
 
-		$str = file_get_contents( $source );
-		if ( strlen( $str ) > 0 ) {
-			$str = trim( preg_replace( '/\s+/', ' ', $str ) );
-			preg_match( "/\<title\>(.*)\<\/title\>/i", $str, $title );
+		if ( ! empty( $source ) ) {
+			$response = wp_remote_get( $source, array(
+				'timeout'     => 5,
+				'redirection' => 5,
+				'httpversion' => '1.0',
+				'user-agent'  => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) 
+				Chrome/72.0.3626.121 Safari/537.36',
+				'blocking'    => true,
+				'headers'     => array(),
+				'cookies'     => array(),
+				'body'        => null,
+				'compress'    => false,
+				'decompress'  => true,
+				'sslverify'   => true,
+				'stream'      => false,
+				'filename'    => null
+			) );
 
-			return $title[1];
+			if ( wp_remote_retrieve_response_code( $response ) === 200 ) {
+				$body = wp_remote_retrieve_body( $response );
+
+				if ( strlen( $body ) > 0 ) {
+					$str = trim( preg_replace( '/\s+/', ' ', $body ) );
+					preg_match( "/\<title\>(.*)\<\/title\>/i", $str, $title );
+
+					return $title[1];
+				}
+			}
 		}
 
 		return '';
 	}
 
+	/**
+	 * Get embed source from link
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $source
+	 * @param $source_type
+	 *
+	 * @return string
+	 */
+	public static function get_embed_source( $source, $source_type ) {
+
+		$embed_source = $source;
+
+		switch ( $source_type ) {
+			case 'youtube' :
+				$embed_source = self::prepare_source_youtube( $source, true );
+				break;
+			case 'dropbox' :
+				$embed_source = self::prepare_source_dropbox( $source, true );
+				break;
+			case 'archive' :
+				$embed_source = self::prepare_source_archive( $source, true );
+				break;
+			case 'bitchute' :
+				$embed_source = self::prepare_source_bitchute( $source, true );
+				break;
+			case 'vidlii' :
+				$embed_source = self::prepare_source_vidlii( $source, true );
+				break;
+			case 'mega' :
+				$embed_source = self::prepare_source_mega( $source, true );
+				break;
+		}
+
+		return $embed_source;
+	}
+
+	/**
+	 * Get youtube id from url
+	 *
+	 * @since 1.0.0
+	 *
+	 * @param $embed_source
+	 *
+	 * @return string
+	 */
+	public static function get_youtube_id( $embed_source ) {
+
+		$request_string = explode('embed/', $embed_source);
+
+		if (isset($request_string[1])) {
+			$youtube_id = explode('\?', $request_string[1]);
+
+			return $youtube_id[0];
+		}
+
+		return '';
+	}
 }
