@@ -663,7 +663,7 @@ class Elite_Video_Player_Sources_Player {
 
 		$source_type = false;
 
-		for ( $i = 1; $i <= 10; $i ++ ) {
+		for ( $i = 1; $i <= 100; $i ++ ) {
 			$source      = get_field( 'elite-video-source-' . $i, $post->ID );
 			$source_type = Elite_Video_Player_Sources_Checks::check_source( $source );
 			if ( false !== $source_type ) {
